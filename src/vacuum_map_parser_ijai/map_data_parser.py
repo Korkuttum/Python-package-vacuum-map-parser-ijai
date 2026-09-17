@@ -123,11 +123,19 @@ class IjaiMapDataParser(MapDataParser):
         _LOGGER.debug("width: %d, height: %d", image_width, image_height)
 
         # Non painted map tranformation
-        if (
-                len(set(self.robot_map.mapData.mapData).symmetric_difference(
-                    [0, 128, 127])) == 0
-                and len(self.robot_map.roomChain) > 0
-                and self.robot_map.mapType == 0):
+        raw_values = sorted(set(self.robot_map.mapData.mapData))
+        will_beautify = (
+            len(set(self.robot_map.mapData.mapData).symmetric_difference(
+                [0, 128, 127])) == 0
+            and len(self.robot_map.roomChain) > 0
+            and self.robot_map.mapType == 0)
+        _LOGGER.debug(
+            "DEBUG_DUMP mapType=%s roomChain_len=%d raw_value_count=%d "
+            "raw_values=%s will_beautify=%s",
+            self.robot_map.mapType, len(self.robot_map.roomChain),
+            len(raw_values), raw_values, will_beautify,
+        )
+        if will_beautify:
             buautify_obj = Beautify.BeautifyMap(self.robot_map.mapHead)
             buautify_obj.setMap(self.robot_map.mapData)
             buautify_obj.transform()
