@@ -9,8 +9,9 @@ from typing import Any
 from vacuum_map_parser_base.config.color import ColorsPalette
 from vacuum_map_parser_base.config.drawable import Drawable
 from vacuum_map_parser_base.config.image_config import ImageConfig
-from vacuum_map_parser_base.config.size import Sizes
+from vacuum_map_parser_base.config.size import Size, Sizes
 from vacuum_map_parser_base.config.text import Text
+from vacuum_map_parser_base.image_generator import ImageGenerator
 from vacuum_map_parser_base.map_data import Area, ImageData, MapData, Path, Point, Room, Wall, Zone
 from vacuum_map_parser_base.map_data_parser import MapDataParser
 
@@ -45,6 +46,7 @@ class IjaiMapDataParser(MapDataParser):
     ):
         super().__init__(palette, sizes, drawables, image_config, texts)
         self._image_parser = IjaiImageParser(palette, image_config, drawables)
+        self._drawables = drawables
 
     def unpack_map(self, raw_encoded: bytes, *args: Any, **kwargs: Any) -> bytes:
         return zlib.decompress(
@@ -111,6 +113,15 @@ class IjaiMapDataParser(MapDataParser):
                 _LOGGER.debug("current vacuum room: %s", map_data.vacuum_room)
 
         if map_data.image is not None and not map_data.image.is_empty:
+            # Icon/line sizes (vacuum, charger, obstacles, path width, ...)
+            # are plain pixel values that vacuum_map_parser_base never
+            # scales, so when the auto-scale in IjaiImageParser enlarges the
+            # map they'd otherwise stay a fixed, increasingly tiny size.
+            effective_scale = map_data.image.dimensions.scale
+            if effective_scale != 1:
+                scaled_sizes = Sizes({size: self._sizes.get_size(size) * effective_scale for size in Size})
+                self._image_generator = ImageGenerator(
+                    self._palette, scaled_sizes, self._drawables, self._image_config, self._texts)
             self._image_generator.draw_map(map_data)
 
         return map_data

@@ -23,7 +23,7 @@ AUTO_TRIM_PADDING = 15
 # terms. If scaling it up to at least this many pixels on its longer edge
 # would need more than the configured scale, bump the scale to reach it,
 # so maps aren't blurry/pixelated by default.
-AUTO_SCALE_TARGET_DIMENSION = 640
+AUTO_SCALE_TARGET_DIMENSION = 960
 
 
 class IjaiImageParser:
@@ -61,10 +61,8 @@ class IjaiImageParser:
                     min_x = x
                 if min_y is None or y < min_y:
                     min_y = y
-                if x > max_x:
-                    max_x = x
-                if y > max_y:
-                    max_y = y
+                max_x = max(max_x, x)
+                max_y = max(max_y, y)
 
         if min_x is None or min_y is None:
             # Nothing explored yet; leave the configured trim as-is.
@@ -102,6 +100,12 @@ class IjaiImageParser:
         longer_edge = max(trimmed_width, trimmed_height)
         auto_scale = AUTO_SCALE_TARGET_DIMENSION / longer_edge if longer_edge > 0 else 1
         scale = max(configured_scale, auto_scale)
+        _LOGGER.debug(
+            "trimmed_width=%d trimmed_height=%d configured_scale=%s auto_scale=%.3f "
+            "effective_scale=%.3f final_image_size=%dx%d",
+            trimmed_width, trimmed_height, configured_scale, auto_scale, scale,
+            int(trimmed_width * scale), int(trimmed_height * scale),
+        )
 
         image = Image.new('RGBA', (trimmed_width, trimmed_height))
         pixels = image.load()
@@ -138,8 +142,12 @@ class IjaiImageParser:
                     _LOGGER.debug(
                         "unknown pixel [%s,%s] = %s", x, y, pixel_type)
         if scale != 1 and trimmed_width != 0 and trimmed_height != 0:
+            # NEAREST just turns each source pixel into a bigger flat square
+            # (blocky), which doesn't read as higher resolution even though
+            # it technically has more pixels. LANCZOS smooths the result,
+            # which looks sharper once the map is auto-scaled up.
             image = image.resize(
-                (int(trimmed_width * scale), int(trimmed_height * scale)), resample=Resampling.NEAREST)
+                (int(trimmed_width * scale), int(trimmed_height * scale)), resample=Resampling.LANCZOS)
         if len(unknown_pixels) > 0:
             _LOGGER.warning('unknown pixel_types: %s', unknown_pixels)
         return image, rooms, cleaned_areas, effective_trim, scale
