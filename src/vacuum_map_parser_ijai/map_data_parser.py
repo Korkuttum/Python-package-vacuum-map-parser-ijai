@@ -6,7 +6,9 @@ import zlib
 from dataclasses import replace
 from typing import Any
 
-from vacuum_map_parser_base.config.color import ColorsPalette
+from PIL import ImageFont
+
+from vacuum_map_parser_base.config.color import ColorsPalette, SupportedColor
 from vacuum_map_parser_base.config.drawable import Drawable
 from vacuum_map_parser_base.config.image_config import ImageConfig
 from vacuum_map_parser_base.config.size import Size, Sizes
@@ -28,6 +30,39 @@ _LOGGER = logging.getLogger(__name__)
 # should take up, matched by measuring the official Xiaomi app's icon
 # against its map image (~7% diameter, i.e. ~3.5% radius).
 TARGET_VACUUM_RADIUS_RATIO = 0.035
+
+# Fraction of the final rendered image width used as the room-name font
+# size.
+ROOM_NAME_FONT_RATIO = 0.035
+ROOM_NAME_MIN_FONT_SIZE = 10
+
+
+class _IjaiImageGenerator(ImageGenerator):
+    """ImageGenerator that sizes room-name text relative to the map instead
+    of using vacuum_map_parser_base's hardcoded-tiny default PIL font."""
+
+    def _draw_room_names(self, map_data: MapData) -> None:
+        if map_data.rooms is None or map_data.image is None:
+            return
+        color = self._get_color(SupportedColor.ROOM_NAMES)
+        dims = map_data.image.dimensions
+        font_size = max(ROOM_NAME_MIN_FONT_SIZE, int(dims.width * dims.scale * ROOM_NAME_FONT_RATIO))
+        font = ImageFont.load_default(size=font_size)
+        for room in map_data.rooms.values():
+            p = room.point()
+            if p is None or room.name is None:
+                continue
+            point = p.to_img(dims)
+            self._draw_room_name_text(map_data.image, room.name, point.x, point.y, font, color)
+
+    @staticmethod
+    def _draw_room_name_text(image: ImageData, text: str, x: float, y: float, font: Any, color: Any) -> None:
+        def draw_func(draw: Any) -> None:
+            left, top, right, bottom = draw.textbbox((0, 0), text, font)
+            w, h = right - left, bottom - top
+            draw.text((x - w / 2, y - h / 2), text, font=font, fill=color)
+
+        ImageGenerator._draw_on_new_layer(image, draw_func, ImageGenerator._use_transparency(color))
 
 
 class IjaiMapDataParser(MapDataParser):
@@ -52,6 +87,7 @@ class IjaiMapDataParser(MapDataParser):
         super().__init__(palette, sizes, drawables, image_config, texts)
         self._image_parser = IjaiImageParser(palette, image_config, drawables)
         self._drawables = drawables
+        self._image_generator = _IjaiImageGenerator(palette, sizes, drawables, image_config, texts)
 
     def unpack_map(self, raw_encoded: bytes, *args: Any, **kwargs: Any) -> bytes:
         return zlib.decompress(
@@ -134,7 +170,7 @@ class IjaiMapDataParser(MapDataParser):
             icon_scale = target_vacuum_radius / base_vacuum_radius if base_vacuum_radius else 1
             if icon_scale != 1:
                 scaled_sizes = Sizes({size: self._sizes.get_size(size) * icon_scale for size in Size})
-                self._image_generator = ImageGenerator(
+                self._image_generator = _IjaiImageGenerator(
                     self._palette, scaled_sizes, self._drawables, self._image_config, self._texts)
             self._image_generator.draw_map(map_data)
 

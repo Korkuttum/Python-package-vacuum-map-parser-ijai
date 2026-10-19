@@ -44,7 +44,11 @@ class IjaiImageParser:
         self._image_config = image_config
         self._drawables = drawables
         self.color_map = {
-            IjaiImageParser.MAP_OUTSIDE: palette.get_color(SupportedColor.MAP_OUTSIDE),
+            # Fully transparent rather than a filled color (matches Dreame's
+            # rendering): the unexplored background should show through to
+            # whatever is behind the image (card/page background), not
+            # paint over it with a fixed color.
+            IjaiImageParser.MAP_OUTSIDE: (255, 255, 255, 0),
             IjaiImageParser.MAP_WALL: palette.get_color(SupportedColor.MAP_WALL_V2),
             IjaiImageParser.MAP_SCAN: palette.get_color(SupportedColor.SCAN),
             IjaiImageParser.MAP_NEW_DISCOVERED_AREA: palette.get_color(SupportedColor.NEW_DISCOVERED_AREA)}
