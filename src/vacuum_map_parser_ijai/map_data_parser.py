@@ -119,7 +119,11 @@ class IjaiMapDataParser(MapDataParser):
             # map they'd otherwise stay a fixed, increasingly tiny size.
             effective_scale = map_data.image.dimensions.scale
             if effective_scale != 1:
-                scaled_sizes = Sizes({size: self._sizes.get_size(size) * effective_scale for size in Size})
+                # Scaling icons 1:1 with the (often large) auto-scale makes
+                # them look oversized; grow them at half that rate instead,
+                # just enough to stay visible without dominating the map.
+                icon_scale = 1 + (effective_scale - 1) * 0.5
+                scaled_sizes = Sizes({size: self._sizes.get_size(size) * icon_scale for size in Size})
                 self._image_generator = ImageGenerator(
                     self._palette, scaled_sizes, self._drawables, self._image_config, self._texts)
             self._image_generator.draw_map(map_data)

@@ -142,12 +142,12 @@ class IjaiImageParser:
                     _LOGGER.debug(
                         "unknown pixel [%s,%s] = %s", x, y, pixel_type)
         if scale != 1 and trimmed_width != 0 and trimmed_height != 0:
-            # NEAREST just turns each source pixel into a bigger flat square
-            # (blocky), which doesn't read as higher resolution even though
-            # it technically has more pixels. LANCZOS smooths the result,
-            # which looks sharper once the map is auto-scaled up.
+            # LANCZOS blurs the hard edges between rooms/walls on this
+            # flat-color map; NEAREST keeps them crisp. The bigger win was
+            # the auto-crop putting more of the image where the floor plan
+            # actually is, not smoothing the resize.
             image = image.resize(
-                (int(trimmed_width * scale), int(trimmed_height * scale)), resample=Resampling.LANCZOS)
+                (int(trimmed_width * scale), int(trimmed_height * scale)), resample=Resampling.NEAREST)
         if len(unknown_pixels) > 0:
             _LOGGER.warning('unknown pixel_types: %s', unknown_pixels)
         return image, rooms, cleaned_areas, effective_trim, scale
