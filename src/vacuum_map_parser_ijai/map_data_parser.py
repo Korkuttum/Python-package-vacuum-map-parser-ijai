@@ -3,6 +3,7 @@
 import logging
 import math
 import zlib
+from dataclasses import replace
 from typing import Any
 
 from vacuum_map_parser_base.config.color import ColorsPalette
@@ -123,18 +124,11 @@ class IjaiMapDataParser(MapDataParser):
         _LOGGER.debug("width: %d, height: %d", image_width, image_height)
 
         # Non painted map tranformation
-        raw_values = sorted(set(self.robot_map.mapData.mapData))
         will_beautify = (
             len(set(self.robot_map.mapData.mapData).symmetric_difference(
                 [0, 128, 127])) == 0
             and len(self.robot_map.roomChain) > 0
             and self.robot_map.mapType == 0)
-        _LOGGER.debug(
-            "DEBUG_DUMP mapType=%s roomChain_len=%d raw_value_count=%d "
-            "raw_values=%s will_beautify=%s",
-            self.robot_map.mapType, len(self.robot_map.roomChain),
-            len(raw_values), raw_values, will_beautify,
-        )
         if will_beautify:
             buautify_obj = Beautify.BeautifyMap(self.robot_map.mapHead)
             buautify_obj.setMap(self.robot_map.mapData)
@@ -144,7 +138,7 @@ class IjaiMapDataParser(MapDataParser):
             buautify_obj.normalizeMap()
             self.robot_map.mapData.mapData = bytes(buautify_obj.getMap())
 
-        image, rooms_raw, cleaned_areas = self._image_parser.parse(
+        image, rooms_raw, cleaned_areas, effective_trim, effective_scale = self._image_parser.parse(
             self.robot_map.mapData.mapData, image_width, image_height)
         if image is None:
             image = self._image_generator.create_empty_map_image()
@@ -159,6 +153,13 @@ class IjaiMapDataParser(MapDataParser):
                 self.coord_transformer.image_to_map_y(room[3] + image_top),
                 number,
             )
+        # ImageData re-derives its own trim/scale from image_config + the
+        # raw (untrimmed) width/height passed below, so the auto-detected
+        # trim and scale computed by the image parser have to be threaded
+        # through here too, otherwise path/wall/vacuum-position drawing
+        # would be positioned/scaled against the configured values instead
+        # of the ones actually used to size the rendered image.
+        effective_image_config = replace(self._image_config, trim=effective_trim, scale=effective_scale)
         return (
             ImageData(
                 image_size,
@@ -166,7 +167,7 @@ class IjaiMapDataParser(MapDataParser):
                 image_left,
                 image_height,
                 image_width,
-                self._image_config,
+                effective_image_config,
                 image,
                 self.coord_transformer.map_to_image,
             ),
