@@ -24,6 +24,11 @@ from .image_parser import IjaiImageParser
 
 _LOGGER = logging.getLogger(__name__)
 
+# Fraction of the final rendered image width the vacuum icon's radius
+# should take up, matched by measuring the official Xiaomi app's icon
+# against its map image (~7% diameter, i.e. ~3.5% radius).
+TARGET_VACUUM_RADIUS_RATIO = 0.035
+
 
 class IjaiMapDataParser(MapDataParser):
     """Ijai map parser."""
@@ -115,14 +120,19 @@ class IjaiMapDataParser(MapDataParser):
         if map_data.image is not None and not map_data.image.is_empty:
             # Icon/line sizes (vacuum, charger, obstacles, path width, ...)
             # are plain pixel values that vacuum_map_parser_base never
-            # scales, so when the auto-scale in IjaiImageParser enlarges the
-            # map they'd otherwise stay a fixed, increasingly tiny size.
-            effective_scale = map_data.image.dimensions.scale
-            if effective_scale != 1:
-                # Scaling icons 1:1 with the (often large) auto-scale makes
-                # them look oversized; grow them at half that rate instead,
-                # just enough to stay visible without dominating the map.
-                icon_scale = 1 + (effective_scale - 1) * 0.6
+            # scales, so they end up a fixed, inconsistent fraction of the
+            # final image depending on how much the auto-crop/auto-scale in
+            # IjaiImageParser enlarged this particular map. Instead of
+            # scaling them relative to the map's own (highly variable)
+            # scale factor, target a fixed fraction of the final rendered
+            # width -- matching how big the vacuum icon looks in the
+            # official app regardless of how tightly this map got cropped.
+            dims = map_data.image.dimensions
+            final_width = dims.width * dims.scale
+            base_vacuum_radius = self._sizes.get_size(Size.VACUUM_RADIUS)
+            target_vacuum_radius = TARGET_VACUUM_RADIUS_RATIO * final_width
+            icon_scale = target_vacuum_radius / base_vacuum_radius if base_vacuum_radius else 1
+            if icon_scale != 1:
                 scaled_sizes = Sizes({size: self._sizes.get_size(size) * icon_scale for size in Size})
                 self._image_generator = ImageGenerator(
                     self._palette, scaled_sizes, self._drawables, self._image_config, self._texts)
