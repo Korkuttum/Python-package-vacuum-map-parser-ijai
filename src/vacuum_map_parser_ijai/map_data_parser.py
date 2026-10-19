@@ -4,6 +4,7 @@ import logging
 import math
 import zlib
 from dataclasses import replace
+from pathlib import Path as FilePath
 from typing import Any
 
 from PIL import ImageFont
@@ -28,13 +29,19 @@ _LOGGER = logging.getLogger(__name__)
 
 # Fraction of the final rendered image width the vacuum icon's radius
 # should take up, matched by measuring the official Xiaomi app's icon
-# against its map image (~7% diameter, i.e. ~3.5% radius).
-TARGET_VACUUM_RADIUS_RATIO = 0.035
+# against its map image.
+TARGET_VACUUM_RADIUS_RATIO = 0.022
 
 # Fraction of the final rendered image width used as the room-name font
 # size.
 ROOM_NAME_FONT_RATIO = 0.035
 ROOM_NAME_MIN_FONT_SIZE = 10
+
+# Bundled font used for room names: Pillow's built-in default font doesn't
+# cover Turkish characters (ı, ğ, ş, ö, ü, ç render as missing-glyph boxes),
+# and relying on whatever happens to be installed on the host isn't
+# reliable -- Home Assistant OS ships with no system fonts.
+_FONT_PATH = FilePath(__file__).parent / "fonts" / "DejaVuSans.ttf"
 
 
 class _IjaiImageGenerator(ImageGenerator):
@@ -47,7 +54,12 @@ class _IjaiImageGenerator(ImageGenerator):
         color = self._get_color(SupportedColor.ROOM_NAMES)
         dims = map_data.image.dimensions
         font_size = max(ROOM_NAME_MIN_FONT_SIZE, int(dims.width * dims.scale * ROOM_NAME_FONT_RATIO))
-        font = ImageFont.load_default(size=font_size)
+        font: Any
+        try:
+            font = ImageFont.truetype(str(_FONT_PATH), font_size)
+        except OSError:
+            _LOGGER.warning("Unable to load bundled font %s, falling back to PIL default", _FONT_PATH)
+            font = ImageFont.load_default(size=font_size)
         for room in map_data.rooms.values():
             p = room.point()
             if p is None or room.name is None:
