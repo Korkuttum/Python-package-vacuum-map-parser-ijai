@@ -66,7 +66,7 @@ class IjaiImageParser:
                 if y > max_y:
                     max_y = y
 
-        if min_x is None:
+        if min_x is None or min_y is None:
             # Nothing explored yet; leave the configured trim as-is.
             return configured
 
